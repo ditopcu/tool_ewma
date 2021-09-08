@@ -38,7 +38,7 @@ ui <- dashboardPage(
                    sidebarMenu(id = "tabs",
                                fluidRow(column(12, hr())),
                                menuItem("Instructions", tabName = "mi_instructions"),
-                               menuItem("Analyzer", tabName = "mi_analyzer")) ,
+                               menuItem("EWMA Analyzer", tabName = "mi_analyzer")) ,
     fluidRow(column(12, hr())),
     fluidRow(column(12,helpText("Test data can be directly entered or uploaded by an Excel (xlsx) file."))),
     fluidRow(column(12,helpText("Template file is also avalaible."))),
@@ -74,10 +74,12 @@ ui <- dashboardPage(
   tabItems(
     tabItem("mi_instructions", 
             fluidRow(h1("Instructions")),
-            fluidRow(column(12,helpText("Template file is avalaible as XLSX file on the side menu"))),
-            fluidRow(column(12,helpText("Demo lab data is also avalaible on the side menu."))),
+            fluidRow(column(12,helpText("Click 'EWMA Analyzer' on the sidebar to start."))),
+            fluidRow(column(12,helpText("Template file is avalaible as XLSX file on the sidebar menu"))),
+            fluidRow(column(12,helpText("Demo lab data is also avalaible on the sidebar menu."))),
             fluidRow(column(12, hr())),
-            helpText(   a("Click Here for the Github page",     href="https://github.com/ditopcu/ClinLabTool")),
+            helpText(   a("Click Here for the Github page",     href="https://github.com/ditopcu/tool_ewma", " (Source code and slides.)")),
+            
     ),
     tabItem("mi_analyzer", 
             fluidRow(
@@ -120,12 +122,6 @@ server <- function(input, output, session) {
 
 # values and inputs -------------------------------------------------------
 
-  observeEvent(input$slt_lambda, {
-    
-    rv$ewma_lambda <- as.numeric(input$slt_lambda) 
-    
-  })
- 
   observeEvent(input$num_mean, {
     
     
@@ -150,7 +146,7 @@ server <- function(input, output, session) {
     
   })
   
-  # TODO test selection
+
 
 
 # file ops ----------------------------------------------------------------
@@ -203,7 +199,6 @@ server <- function(input, output, session) {
     rv$all_stats_df <- t_all_stats_df
     
 
-    
     updated_data <- updateTT(session, t_all_results_df, t_all_stats_df, selected_test, selected_day )
 
     
@@ -218,22 +213,59 @@ server <- function(input, output, session) {
     
 
 
-# buttons -----------------------------------------------------------------
+# select items & buttons -----------------------------------------------------------------
+  
+  observeEvent(input$slt_lambda, {
+    
+    rv$ewma_lambda <- as.numeric(input$slt_lambda) 
+    
+  })
   
   
   observeEvent(input$slt_test,{
     
     req(rv$all_results_df) # test	day	id_day	result
-
+    
     test_name <- input$slt_test
     rv$selected_test <- test_name
     
-    selected_test_df <- rv$all_results_df |> 
-      filter(test == input$slt_test)
     
-    u_day_list <- unique(selected_test_df$day)
+    
+    
+    u_final_df <-  rv$all_results_df |> 
+      filter(test == rv$selected_test, day == min(day))
+    
+
+    
+    u_day_list <- rv$all_results_df |> 
+      filter(test == rv$selected_test) |> 
+      distinct(day) |> 
+      pull(day)
+ 
+
+    u_stats_df <- rv$all_stats_df |> 
+      filter(test == rv$selected_test)  |> 
+       filter(row_number() == 1)
+    
+
+    selected_mean <- u_stats_df$mean
+    selected_SD <- u_stats_df$sd 
     
     updateSelectInput(session, inputId = "slt_day", choices = u_day_list,  u_day_list[1], label = "Day"  )
+    updateTextAreaInput(session, "results", value = paste(u_final_df$result, collapse = " ")) 
+    
+    updateNumericInput(session, "num_mean",value = selected_mean)
+    updateNumericInput(session, "num_sd",value = selected_SD)
+    
+    
+    rv$ewma_df_0 <- u_final_df
+    
+    
+    rv$ewma_mean <- selected_mean
+    rv$ewma_SD <- selected_SD
+    
+
+
 
   })
   
@@ -284,6 +316,12 @@ server <- function(input, output, session) {
       rv$ewma_mean <- st_mean
       rv$ewma_SD <- st_sd
       
+
+      rv$all_stats_df  <- demo_df |> 
+        group_by(test) |> 
+        summarise(mean = mean(result), sd = sd(result))
+
+
       test_name <- "Demo"
       rv$selected_test <- test_name
       
@@ -298,6 +336,8 @@ server <- function(input, output, session) {
       updateNumericInput(session, "num_sd",value = st_sd)
       
       updateTabItems(session, "tabs", selected = "mi_analyzer")
+      
+      
   })
   
 
@@ -331,7 +371,7 @@ server <- function(input, output, session) {
 
         isolate({
           
-          print((rv$ewma_SD))
+          # print((rv$ewma_SD))
           
 
         
@@ -374,8 +414,8 @@ updateTT <- function(session, all_results_df, all_stats_df, selected_test, selec
   
   u_day_list <- unique(u_results_df$day)
   
-  print(u_day_list)
-  print(all_stats_df)
+  # print(u_day_list)
+  # print(all_stats_df)
   
   
   u_stats_df <- all_stats_df |> 
